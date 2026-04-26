@@ -1,0 +1,10 @@
+raw/
+Info/
+Plots/
+.DS_Store
+crmls_sold.py
+crmls_listed.py
+sold.csv
+listed.csv
+sold_eda.csv
+listed_eda.csv
