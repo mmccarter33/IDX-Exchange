@@ -111,3 +111,29 @@ listed.to_csv('listed_eda.csv', index=False)
 
 # %%
 # Week 3
+
+listed = pd.read_csv("listed_eda.csv", low_memory=False)
+
+listed["ListingContractDate"] = pd.to_datetime(listed["ListingContractDate"], errors="coerce")
+listed["ContractStatusChangeDate"] = pd.to_datetime(listed["ContractStatusChangeDate"], errors="coerce")
+
+# Fetch the mortgage rate data from FRED import pandas as pd
+url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=MORTGAGE30US" 
+mortgage = pd.read_csv(url, parse_dates=['observation_date']) 
+mortgage.columns = ['date', 'rate_30yr_fixed']
+
+# Resample weekly rates to monthly averages 
+mortgage['year_month'] = mortgage['date'].dt.to_period('M')
+mortgage_monthly = (mortgage.groupby('year_month')['rate_30yr_fixed'].mean().reset_index())
+
+# Create a matching year_month key on the MLS datasets and merge
+listed['year_month'] = listed['ListingContractDate'].dt.to_period('M')
+listed = listed.merge(mortgage_monthly, on='year_month', how='left')
+
+# Validate the merge
+print(listed['rate_30yr_fixed'].isnull().sum())
+print(listed[['ListingContractDate', 'year_month', 'ListPrice', 'rate_30yr_fixed']].head())
+
+listed.to_csv('listed_mortgage.csv', index=False)
+
+# %%
