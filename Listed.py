@@ -2,6 +2,7 @@
 import pandas as pd
 import glob
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 # %%
 # Week 1
@@ -35,40 +36,42 @@ combined_listed.to_csv('listed.csv', index=False)
 
 listed = pd.read_csv("listed.csv", low_memory=False)
 
+#converting dates to datetime format
+listed["CloseDate"] = pd.to_datetime(listed["CloseDate"], errors="coerce")
 listed["ListingContractDate"] = pd.to_datetime(listed["ListingContractDate"], errors="coerce")
+listed["PurchaseContractDate"] = pd.to_datetime(listed["PurchaseContractDate"], errors="coerce")
 listed["ContractStatusChangeDate"] = pd.to_datetime(listed["ContractStatusChangeDate"], errors="coerce")
 
+#getting null count and percentages
 null_listed = listed.isnull().sum()
 pct_listed = (null_listed / len(listed)) * 100
 
 listing_report = pd.DataFrame({'total null': null_listed, 'perecnt null': pct_listed})
+
+#finding high null columns
 high_null_listing = listing_report[listing_report['perecnt null'] > 90]
 
 print("possible listed columns to drop:\n", high_null_listing)
 
+#finding other columns to drop
 single_val_listed = [col for col in listed.columns if (listed[col].nunique() <= 1)]
 
 print("single val drops:\n", single_val_listed)
 
+#combining columns to drop and save
 drop_listed = high_null_listing.index.tolist()
 drop_listed = list(set(drop_listed + single_val_listed))
 
 print("listed columns to drop:\n", drop_listed)
+
+#dropping columns
 print("before drop shape:", listed.shape)
 
 listed = listed.drop(columns=drop_listed)
 
 print("after drop shape:", listed.shape)
 
-listed = listed.drop(list(listed.filter(regex='.1$')), axis=1)
-listed = listed.drop_duplicates(subset="ListingKey", keep="last")
-
-print("after duplicate drop shape:", listed.shape)
-
-listed = listed[listed['ContractStatusChangeDate'] >= listed['ListingContractDate']]
-
-print("after date drop shape:", listed.shape)
-
+#creating numeric distribution summary for key variables
 cols = ["ClosePrice", "ListPrice", "OriginalListPrice", "LivingArea",
              "LotSizeAcres", "BedroomsTotal", "BathroomsTotalInteger",
              "DaysOnMarket", "YearBuilt"]
@@ -92,16 +95,14 @@ for col in cols:
 for col in cols:
     if col in listed.columns:
         plt.figure(figsize = (10,6))
-        listed[col].hist(bins = 50)
+        sns.histplot(listed[col], bins=50, kde=True)
         plt.title(f"Listed Distribution of {col}")
-        plt.xlabel(col)
-        plt.ylabel("Frequency")
         plt.savefig(f"Plots/listed_histogram/listed_{col}_histogram.png")
         plt.show()
         plt.close()
 
         plt.figure(figsize = (10,6))
-        listed.boxplot(column = col)
+        sns.boxplot(x=listed[col])
         plt.title(f"Listed Boxplot of {col}")
         plt.savefig(f"Plots/listed_boxplot/listed_{col}_boxplot.png")
         plt.show()
@@ -114,7 +115,9 @@ listed.to_csv('listed_eda.csv', index=False)
 
 listed = pd.read_csv("listed_eda.csv", low_memory=False)
 
+listed["CloseDate"] = pd.to_datetime(listed["CloseDate"], errors="coerce")
 listed["ListingContractDate"] = pd.to_datetime(listed["ListingContractDate"], errors="coerce")
+listed["PurchaseContractDate"] = pd.to_datetime(listed["PurchaseContractDate"], errors="coerce")
 listed["ContractStatusChangeDate"] = pd.to_datetime(listed["ContractStatusChangeDate"], errors="coerce")
 
 # Fetch the mortgage rate data from FRED import pandas as pd
@@ -135,5 +138,169 @@ print(listed['rate_30yr_fixed'].isnull().sum())
 print(listed[['ListingContractDate', 'year_month', 'ListPrice', 'rate_30yr_fixed']].head())
 
 listed.to_csv('listed_mortgage.csv', index=False)
+
+# %%
+# Weeks 4,5
+
+listed = pd.read_csv("listed_mortgage.csv", low_memory=False)
+
+print("original shape:", listed.shape) #(540183, 71)
+
+#converting date fields to datetime format and proving values are properly changed
+date_cols = [
+    'CloseDate',
+    'ListingContractDate',
+    'PurchaseContractDate',
+    'ContractStatusChangeDate'
+]
+
+date_report = listed[date_cols].dtypes
+print(date_report)
+
+listed["CloseDate"] = pd.to_datetime(listed["CloseDate"], errors="coerce")
+listed["ListingContractDate"] = pd.to_datetime(listed["ListingContractDate"], errors="coerce")
+listed["PurchaseContractDate"] = pd.to_datetime(listed["PurchaseContractDate"], errors="coerce")
+listed["ContractStatusChangeDate"] = pd.to_datetime(listed["ContractStatusChangeDate"], errors="coerce")
+
+date_report = listed[date_cols].dtypes
+print(date_report)
+
+#ensuring and proving numeric values are properly typed
+numeric_cols = [
+    'ClosePrice',
+    'OriginalListPrice',
+    'ListPrice',
+    'LivingArea',
+    'LotSizeAcres',
+    'LotSizeSquareFeet',
+    'DaysOnMarket',
+    'ParkingTotal',
+    'BathroomsTotalInteger',
+    'BedroomsTotal',
+    'Stories',
+    'MainLevelBedrooms',
+    'GarageSpaces',
+    'AssociationFee',
+    'rate_30yr_fixed',
+    'Latitude',
+    'Longitude'
+]
+
+numeric_report = listed[numeric_cols].dtypes
+print(numeric_report)
+
+#null report to help find areas to clean
+null_listed = listed.isnull().sum()
+pct_listed = (null_listed / len(listed)) * 100
+
+listed_report = pd.DataFrame({'total null': null_listed, 'perecnt null': pct_listed})
+print(listed_report)
+
+#dropping duplicates and duplicate columns ending in .1
+listed = listed.drop(list(listed.filter(regex='.1$')), axis=1)
+listed = listed.drop_duplicates(subset="ListingKey", keep="last")
+
+print("after duplicate drop shape:", listed.shape) #(540110, 61)
+
+#dropping unnecessary and redundant columns
+drop_cols = [
+    #email not needed
+    'ListAgentEmail',
+    #use list agent full name
+    'ListAgentFirstName',
+    'ListAgentLastName',
+    #use lot size acres and square feet 
+    'LotSizeArea',
+    #trivial info and often same as list office name
+    'CoListOfficeName',
+    #use buyer agent id
+    'BuyerAgentFirstName',
+    'BuyerAgentLastName',
+    #use only co-list agent last name
+    'CoListAgentFirstName',
+    #use listing key
+    'ListingId',
+    'ListingKeyNumeric',
+    #use address or lat and lon
+    'StreetNumberNumeric'
+]
+
+listed = listed.drop(columns=drop_cols)
+
+print("after unnecessary and redundant drop shape:", listed.shape) #(540110, 50)
+
+#finding rows with missing core values and dropping
+core_null = (
+    (listed['LivingArea'].isnull()) |
+    (listed['ListPrice'].isnull()) |
+    (listed['ListingKey'].isnull()) |
+    (listed['MlsStatus'].isnull()) |
+    (listed['DaysOnMarket'].isnull()) |
+    (listed['ListingContractDate'].isnull())
+)
+
+listed = listed[~core_null]
+
+print("after null core drop shape:", listed.shape) #(539554, 50)
+
+#finding rows with impossible numeric values and dropping
+invalid_numeric_values = (
+    (listed['ClosePrice'] <= 0) |
+    (listed['OriginalListPrice'] <= 0) |
+    (listed['ListPrice'] <= 0) |
+    (listed['LivingArea'] <= 0) |
+    (listed['LotSizeAcres'] < 0) |
+    (listed['LotSizeSquareFeet'] < 0) |
+    (listed['DaysOnMarket'] < 0) |
+    (listed['ParkingTotal'] < 0) |
+    (listed['BathroomsTotalInteger'] < 0) |
+    (listed['BedroomsTotal'] < 0) |
+    (listed['Stories'] < 0) |
+    (listed['MainLevelBedrooms'] < 0) |
+    (listed['GarageSpaces'] < 0) |
+    (listed['AssociationFee'] < 0)
+)
+
+listed = listed[~invalid_numeric_values]
+
+print("after impossible numeric values drop shape:", listed.shape) #(539020, 50)
+
+
+#finding all invalid longitude or latitude values and flagging them with new column in csv
+invalid_geo_values = (
+    (listed['Latitude'].isnull()) | 
+    (listed['Longitude'].isnull()) |
+    (listed['Latitude'] == 0) | 
+    (listed['Longitude'] == 0) |
+    (listed['Longitude'] > 0) |
+    (listed['Latitude'] < 32) | 
+    (listed['Latitude'] > 42) |
+    (listed['Longitude'] < -125) | 
+    (listed['Longitude'] > -114)
+)
+
+listed['invalid_geo_flag'] = invalid_geo_values
+invalid_geo_summary = listed[listed['invalid_geo_flag'] == True]
+
+print(invalid_geo_summary)
+print("total rows with invalid coordinates:", len(invalid_geo_summary)) #80331
+
+#finding all invalid dates or timelines and flagging them with new column in csv
+invalid_dates = (
+    (listed['CloseDate'] < listed['ListingContractDate']) | 
+    (listed['CloseDate'] < listed['PurchaseContractDate']) |
+    (listed['PurchaseContractDate'] < listed['ListingContractDate']) |
+    (listed['ContractStatusChangeDate'] < listed['ListingContractDate'])
+)
+
+listed['invalid_dates_flag'] = invalid_dates
+invalid_dates_summary = listed[listed['invalid_dates_flag'] == True]
+
+print(invalid_dates_summary)
+print("total rows with invalid dates:", len(invalid_dates_summary)) #531
+
+print("final shape:", listed.shape) #(539020, 52)
+
+listed.to_csv('listed_cleaned.csv', index=False)
 
 # %%
