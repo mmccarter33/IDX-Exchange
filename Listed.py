@@ -51,25 +51,9 @@ listing_report = pd.DataFrame({'total null': null_listed, 'perecnt null': pct_li
 #finding high null columns
 high_null_listing = listing_report[listing_report['perecnt null'] > 90]
 
-print("possible listed columns to drop:\n", high_null_listing)
-
-#finding other columns to drop
-single_val_listed = [col for col in listed.columns if (listed[col].nunique() <= 1)]
-
-print("single val drops:\n", single_val_listed)
-
-#combining columns to drop and save
 drop_listed = high_null_listing.index.tolist()
-drop_listed = list(set(drop_listed + single_val_listed))
 
 print("listed columns to drop:\n", drop_listed)
-
-#dropping columns
-print("before drop shape:", listed.shape)
-
-listed = listed.drop(columns=drop_listed)
-
-print("after drop shape:", listed.shape)
 
 #creating numeric distribution summary for key variables
 cols = ["ClosePrice", "ListPrice", "OriginalListPrice", "LivingArea",
@@ -123,19 +107,19 @@ listed["ContractStatusChangeDate"] = pd.to_datetime(listed["ContractStatusChange
 # Fetch the mortgage rate data from FRED import pandas as pd
 url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=MORTGAGE30US" 
 mortgage = pd.read_csv(url, parse_dates=['observation_date']) 
-mortgage.columns = ['date', 'rate_30yr_fixed']
+mortgage.columns = ['Date', 'Rate30YrFixed']
 
 # Resample weekly rates to monthly averages 
-mortgage['year_month'] = mortgage['date'].dt.to_period('M')
-mortgage_monthly = (mortgage.groupby('year_month')['rate_30yr_fixed'].mean().reset_index())
+mortgage['YrMo'] = mortgage['Date'].dt.to_period('M')
+mortgage_monthly = (mortgage.groupby('YrMo')['Rate30YrFixed'].mean().reset_index())
 
-# Create a matching year_month key on the MLS datasets and merge
-listed['year_month'] = listed['ListingContractDate'].dt.to_period('M')
-listed = listed.merge(mortgage_monthly, on='year_month', how='left')
+# Create a matching year-month key on the MLS datasets and merge
+listed['YrMo'] = listed['ListingContractDate'].dt.to_period('M')
+listed = listed.merge(mortgage_monthly, on='YrMo', how='left')
 
 # Validate the merge
-print(listed['rate_30yr_fixed'].isnull().sum())
-print(listed[['ListingContractDate', 'year_month', 'ListPrice', 'rate_30yr_fixed']].head())
+print(listed['Rate30YrFixed'].isnull().sum())
+print(listed[['ListingContractDate', 'YrMo', 'ListPrice', 'Rate30YrFixed']].head())
 
 listed.to_csv('listed_mortgage.csv', index=False)
 
@@ -144,7 +128,7 @@ listed.to_csv('listed_mortgage.csv', index=False)
 
 listed = pd.read_csv("listed_mortgage.csv", low_memory=False)
 
-print("original shape:", listed.shape) #(540183, 71)
+print("original shape:", listed.shape) #(540183, 86)
 
 #converting date fields to datetime format and proving values are properly changed
 date_cols = [
@@ -181,7 +165,7 @@ numeric_cols = [
     'MainLevelBedrooms',
     'GarageSpaces',
     'AssociationFee',
-    'rate_30yr_fixed',
+    'Rate30YrFixed',
     'Latitude',
     'Longitude'
 ]
@@ -189,12 +173,16 @@ numeric_cols = [
 numeric_report = listed[numeric_cols].dtypes
 print(numeric_report)
 
-#null report to help find areas to clean
-null_listed = listed.isnull().sum()
-pct_listed = (null_listed / len(listed)) * 100
+#dropping columns determined in week 3 due to high null
+listed = listed.drop(columns=drop_listed)
 
-listed_report = pd.DataFrame({'total null': null_listed, 'perecnt null': pct_listed})
-print(listed_report)
+print("after null drop shape:", listed.shape) #(540183, 73)
+
+#dropping any columns with only one unique value other than those determined to be saved
+single_val_listed = [col for col in listed.columns if (listed[col].nunique() <= 1)]
+listed = listed.drop(columns=single_val_listed)
+
+print("after single val drop shape:", listed.shape) #(540183, 71)
 
 #dropping duplicates and duplicate columns ending in .1
 listed = listed.drop(list(listed.filter(regex='.1$')), axis=1)
@@ -276,14 +264,16 @@ invalid_geo_values = (
     (listed['Latitude'] < 32) | 
     (listed['Latitude'] > 42) |
     (listed['Longitude'] < -125) | 
-    (listed['Longitude'] > -114)
+    (listed['Longitude'] > -114) |
+    (listed['StateOrProvince'] != "CA")
 )
 
-listed['invalid_geo_flag'] = invalid_geo_values
-invalid_geo_summary = listed[listed['invalid_geo_flag'] == True]
+listed['InvalidGeoFlag'] = invalid_geo_values
+invalid_geo_summary = listed[listed['InvalidGeoFlag'] == True]
 
 print(invalid_geo_summary)
-print("total rows with invalid coordinates:", len(invalid_geo_summary)) #80331
+print("total rows with invalid coordinates:", len(invalid_geo_summary)) #80371
+#high invalid coordinate flags due to large amounts of null lat and lon
 
 #finding all invalid dates or timelines and flagging them with new column in csv
 invalid_dates = (
@@ -293,8 +283,8 @@ invalid_dates = (
     (listed['ContractStatusChangeDate'] < listed['ListingContractDate'])
 )
 
-listed['invalid_dates_flag'] = invalid_dates
-invalid_dates_summary = listed[listed['invalid_dates_flag'] == True]
+listed['InvalidDatesFlag'] = invalid_dates
+invalid_dates_summary = listed[listed['InvalidDatesFlag'] == True]
 
 print(invalid_dates_summary)
 print("total rows with invalid dates:", len(invalid_dates_summary)) #531
