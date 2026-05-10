@@ -13,22 +13,22 @@ data = []
 count1 = 0
 
 for f in files:
-    file = pd.read_csv(f)
+    file = pd.read_csv(f, low_memory=False)
     count1 += len(file)
     data.append(file)
 combined_sold = pd.concat(data, ignore_index=True)
 print(count1)
-##Before concat count = 591733
+##Before concat count = 615994
 
 count2 = len(combined_sold)
 print(count2)
-##After concat count = 591733
+##After concat count = 615994
 
 combined_sold = combined_sold[combined_sold['PropertyType'] == 'Residential']
 
 count3 = len(combined_sold)
 print(count3)
-##After filter count = 397603
+##After filter count = 414184
 
 combined_sold.to_csv('sold.csv', index=False)
 
@@ -134,7 +134,7 @@ sold.to_csv('sold_mortgage.csv', index=False)
 
 sold = pd.read_csv("sold_mortgage.csv", low_memory=False)
 
-print("original shape:", sold.shape) #(397603, 86)
+print("original shape:", sold.shape) #(414184, 86)
 
 #converting date fields to datetime format and proving values are properly changed
 date_cols = [
@@ -182,20 +182,20 @@ print(numeric_report)
 #dropping columns determined in week 3 due to high null
 sold = sold.drop(columns=drop_sold)
 
-print("after null drop shape:", sold.shape) #(397603, 71)
+print("after null drop shape:", sold.shape) #(414184, 73)
 
 #dropping any columns with only one unique value other than those determined to be saved
 save_list = ['WaterfrontYN', 'BasementYN']
 single_val_sold = [col for col in sold.columns if (sold[col].nunique() <= 1) & (col not in save_list)]
 sold = sold.drop(columns=single_val_sold)
 
-print("after single val drop shape:", sold.shape) #(397603, 69)
+print("after single val drop shape:", sold.shape) #(414184, 70)
 
 #dropping duplicates and duplicate columns ending in .1
 sold = sold.drop(list(sold.filter(regex='.1$')), axis=1)
 sold = sold.drop_duplicates(subset="ListingKey", keep="last")
 
-print("after duplicate drop shape:", sold.shape) #(397273, 69)
+print("after duplicate drop shape:", sold.shape) #(413843, 70)
 
 #dropping unnecessary and redundant columns
 drop_cols = [
@@ -204,7 +204,7 @@ drop_cols = [
     #use list agent full name
     'ListAgentFirstName',
     'ListAgentLastName',
-    #lat and lon generation no needed
+    #lat and lon generation not needed
     'latfilled',
     'lonfilled',
     #use lot size acres and square feet 
@@ -220,12 +220,14 @@ drop_cols = [
     'ListingId',
     'ListingKeyNumeric',
     #use address or lat and lon
-    'StreetNumberNumeric'
+    'StreetNumberNumeric',
+    #orginating system not needed
+    'OriginatingSystemSubName'
 ]
 
 sold = sold.drop(columns=drop_cols)
 
-print("after unnecessary and redundant drop shape:", sold.shape) #(397273, 56)
+print("after unnecessary and redundant drop shape:", sold.shape) #(413843, 56)
 
 #filling in Y/N feature columns with N 
 #waterfront and basement only have true values making null false
@@ -246,7 +248,7 @@ core_null = (
 
 sold = sold[~core_null]
 
-print("after null core drop shape:", sold.shape) #(397041, 56)
+print("after null core drop shape:", sold.shape) #(413606, 56)
 
 #finding rows with impossible numeric values and dropping
 invalid_numeric_values = (
@@ -268,7 +270,7 @@ invalid_numeric_values = (
 
 sold = sold[~invalid_numeric_values]
 
-print("after impossible numeric values drop shape:", sold.shape) #(396751, 56)
+print("after impossible numeric values drop shape:", sold.shape) #(413309, 56)
 
 #finding all invalid longitude or latitude values and flagging them with new column in csv
 invalid_geo_values = (
@@ -288,7 +290,7 @@ sold['InvalidGeoFlag'] = invalid_geo_values
 invalid_geo_summary = sold[sold['InvalidGeoFlag'] == True]
 
 print(invalid_geo_summary)
-print("total rows with invalid coordinates:", len(invalid_geo_summary)) #15895
+print("total rows with invalid coordinates:", len(invalid_geo_summary)) #16032
 #high invalid coordinate flags due to large amounts of null lat and lon
 
 #finding all invalid dates or timelines and flagging them with new column in csv
@@ -303,10 +305,74 @@ sold['InvalidDatesFlag'] = invalid_dates
 invalid_dates_summary = sold[sold['InvalidDatesFlag'] == True]
 
 print(invalid_dates_summary)
-print("total rows with invalid dates:", len(invalid_dates_summary)) #499
+print("total rows with invalid dates:", len(invalid_dates_summary)) #508
 
-print("final shape:", sold.shape) #(396751, 58)
+print("final shape:", sold.shape) #(413309, 58)
 
 sold.to_csv('sold_cleaned.csv', index=False)
 
 # %%
+# Week 6
+
+sold = pd.read_csv("sold_cleaned.csv", low_memory=False)
+
+sold['CloseDate'] = pd.to_datetime(sold['CloseDate'], errors="coerce")
+sold['ListingContractDate'] = pd.to_datetime(sold['ListingContractDate'], errors="coerce")
+sold['PurchaseContractDate'] = pd.to_datetime(sold['PurchaseContractDate'], errors="coerce")
+sold['ContractStatusChangeDate'] = pd.to_datetime(sold['ContractStatusChangeDate'], errors="coerce")
+
+sold['PriceRatio'] = sold['ClosePrice'] / sold['ListPrice']
+sold['PricePerSqFt'] = sold['ClosePrice'] / sold['LivingArea']
+sold['CloseToOrigListRatio'] = sold['ClosePrice'] / sold['OriginalListPrice']
+
+sold['Year'] = sold['CloseDate'].dt.year
+sold['Month'] = sold['CloseDate'].dt.month
+
+sold['ListingToContractDays'] = (sold['PurchaseContractDate'] - sold['ListingContractDate']).dt.days
+sold['ContractToCloseDays'] = (sold['CloseDate'] - sold['PurchaseContractDate']).dt.days
+
+sample = [
+    'ClosePrice', 
+    'PriceRatio', 
+    'LivingArea', 
+    'OriginalListPrice', 
+    'PurchaseContractDate', 
+    'ListingContractDate', 
+    'CloseDate', 
+    'PricePerSqFt', 
+    'CloseToOrigListRatio', 
+    'DaysOnMarket', 
+    'Year', 'Month', 'YrMo', 
+    'ListingToContractDays', 
+    'ContractToCloseDays'
+]
+
+print(sold[sample].head())
+
+features = [
+    'PriceRatio', 
+    'ListPrice', 
+    'PricePerSqFt', 
+    'CloseToOrigListRatio', 
+    'DaysOnMarket', 
+    'Year', 'Month', 
+    'ListingToContractDays', 
+    'ContractToCloseDays'
+]
+
+segments = [
+    'PropertySubType', 
+    'CountyOrParish', 
+    'MLSAreaMajor', 
+    'ListOfficeName', 
+    'BuyerOfficeName'
+]
+
+for seg in segments:
+    summary = sold.groupby(seg)[features].agg(['count', 'mean', 'median', 'min', 'max'])
+    summary.columns = [f"{feat}_{stat}" for feat, stat in summary.columns]
+    summary = summary.reset_index()
+    summary.to_csv((f"Summaries/sold_{seg}_summary.csv"), index=False)
+
+sold.to_csv('sold_features.csv', index=False)
+

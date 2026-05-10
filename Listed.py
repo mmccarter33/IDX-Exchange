@@ -12,22 +12,22 @@ data = []
 count1 = 0
 
 for f in files:
-    file = pd.read_csv(f)
+    file = pd.read_csv(f, low_memory=False)
     count1 += len(file)
     data.append(file)
 combined_listed = pd.concat(data, ignore_index=True)
 print(count1)
-##Before concat count = 852963
+##Before concat count = 891983
 
 count2 = len(combined_listed)
 print(count2)
-##After concat count = 852963
+##After concat count = 891983
 
 combined_listed = combined_listed[combined_listed['PropertyType'] == 'Residential']
 
 count3 = len(combined_listed)
 print(count3)
-##After filter count = 540183
+##After filter count = 566673
 
 combined_listed.to_csv('listed.csv', index=False)
 
@@ -128,7 +128,7 @@ listed.to_csv('listed_mortgage.csv', index=False)
 
 listed = pd.read_csv("listed_mortgage.csv", low_memory=False)
 
-print("original shape:", listed.shape) #(540183, 86)
+print("original shape:", listed.shape) #(566673, 86)
 
 #converting date fields to datetime format and proving values are properly changed
 date_cols = [
@@ -176,19 +176,19 @@ print(numeric_report)
 #dropping columns determined in week 3 due to high null
 listed = listed.drop(columns=drop_listed)
 
-print("after null drop shape:", listed.shape) #(540183, 73)
+print("after null drop shape:", listed.shape) #(566673, 73)
 
 #dropping any columns with only one unique value other than those determined to be saved
 single_val_listed = [col for col in listed.columns if (listed[col].nunique() <= 1)]
 listed = listed.drop(columns=single_val_listed)
 
-print("after single val drop shape:", listed.shape) #(540183, 71)
+print("after single val drop shape:", listed.shape) #(566673, 71)
 
 #dropping duplicates and duplicate columns ending in .1
 listed = listed.drop(list(listed.filter(regex='.1$')), axis=1)
 listed = listed.drop_duplicates(subset="ListingKey", keep="last")
 
-print("after duplicate drop shape:", listed.shape) #(540110, 61)
+print("after duplicate drop shape:", listed.shape) #(566572, 61)
 
 #dropping unnecessary and redundant columns
 drop_cols = [
@@ -215,7 +215,7 @@ drop_cols = [
 
 listed = listed.drop(columns=drop_cols)
 
-print("after unnecessary and redundant drop shape:", listed.shape) #(540110, 50)
+print("after unnecessary and redundant drop shape:", listed.shape) #(566572, 50)
 
 #finding rows with missing core values and dropping
 core_null = (
@@ -229,7 +229,7 @@ core_null = (
 
 listed = listed[~core_null]
 
-print("after null core drop shape:", listed.shape) #(539554, 50)
+print("after null core drop shape:", listed.shape) #(565992, 50)
 
 #finding rows with impossible numeric values and dropping
 invalid_numeric_values = (
@@ -251,8 +251,7 @@ invalid_numeric_values = (
 
 listed = listed[~invalid_numeric_values]
 
-print("after impossible numeric values drop shape:", listed.shape) #(539020, 50)
-
+print("after impossible numeric values drop shape:", listed.shape) #(565433, 50)
 
 #finding all invalid longitude or latitude values and flagging them with new column in csv
 invalid_geo_values = (
@@ -272,7 +271,7 @@ listed['InvalidGeoFlag'] = invalid_geo_values
 invalid_geo_summary = listed[listed['InvalidGeoFlag'] == True]
 
 print(invalid_geo_summary)
-print("total rows with invalid coordinates:", len(invalid_geo_summary)) #80371
+print("total rows with invalid coordinates:", len(invalid_geo_summary)) #80678
 #high invalid coordinate flags due to large amounts of null lat and lon
 
 #finding all invalid dates or timelines and flagging them with new column in csv
@@ -287,10 +286,76 @@ listed['InvalidDatesFlag'] = invalid_dates
 invalid_dates_summary = listed[listed['InvalidDatesFlag'] == True]
 
 print(invalid_dates_summary)
-print("total rows with invalid dates:", len(invalid_dates_summary)) #531
+print("total rows with invalid dates:", len(invalid_dates_summary)) #538
 
-print("final shape:", listed.shape) #(539020, 52)
+print("final shape:", listed.shape) #(565433, 52)
 
 listed.to_csv('listed_cleaned.csv', index=False)
 
+# %%
+# Week 6
+
+listed = pd.read_csv("listed_cleaned.csv", low_memory=False)
+
+listed['CloseDate'] = pd.to_datetime(listed['CloseDate'], errors="coerce")
+listed['ListingContractDate'] = pd.to_datetime(listed['ListingContractDate'], errors="coerce")
+listed['PurchaseContractDate'] = pd.to_datetime(listed['PurchaseContractDate'], errors="coerce")
+listed['ContractStatusChangeDate'] = pd.to_datetime(listed['ContractStatusChangeDate'], errors="coerce")
+
+#creating new columns through feature engineering
+listed['PriceRatio'] = listed['ClosePrice'] / listed['ListPrice']
+listed['PricePerSqFt'] = listed['ClosePrice'] / listed['LivingArea']
+listed['CloseToOrigListRatio'] = listed['ClosePrice'] / listed['OriginalListPrice']
+
+listed['Year'] = listed['CloseDate'].dt.year
+listed['Month'] = listed['CloseDate'].dt.month
+
+listed['ListingToContractDays'] = (listed['PurchaseContractDate'] - listed['ListingContractDate']).dt.days
+listed['ContractToCloseDays'] = (listed['CloseDate'] - listed['PurchaseContractDate']).dt.days
+
+#sample output showing that the new columns are correctly populated
+sample = [
+    'ClosePrice', 
+    'PriceRatio', 
+    'LivingArea', 
+    'OriginalListPrice', 
+    'PurchaseContractDate', 
+    'ListingContractDate', 
+    'CloseDate', 
+    'PricePerSqFt', 
+    'CloseToOrigListRatio', 
+    'DaysOnMarket', 
+    'Year', 'Month', 'YrMo', 
+    'ListingToContractDays', 
+    'ContractToCloseDays'
+]
+
+print(listed[sample].head())
+
+#generating statistic summaries for columns and each group within them and creating csv files
+features = [
+    'PriceRatio',  
+    'PricePerSqFt', 
+    'CloseToOrigListRatio', 
+    'DaysOnMarket', 
+    'Year', 'Month', 
+    'ListingToContractDays', 
+    'ContractToCloseDays'
+]
+
+segments = [
+    'PropertySubType', 
+    'CountyOrParish', 
+    'MLSAreaMajor', 
+    'ListOfficeName', 
+    'BuyerOfficeName'
+]
+
+for seg in segments:
+    summary = listed.groupby(seg)[features].agg(['count', 'mean', 'median', 'min', 'max'])
+    summary.columns = [f"{feat}_{stat}" for feat, stat in summary.columns]
+    summary = summary.reset_index()
+    summary.to_csv((f"Summaries/listed_{seg}_summary.csv"), index=False)
+
+listed.to_csv('listed_features.csv', index=False)
 # %%
