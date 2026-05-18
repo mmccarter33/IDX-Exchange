@@ -15,3 +15,7 @@ sold_cleaned.csv
 listed_cleaned.csv
 sold_features.csv
 listed_features.csv
+sold_outlier_filtered.csv
+sold_outlier_flag.csv
+listed_outlier_filtered.csv
+listed_outlier_flag.csv

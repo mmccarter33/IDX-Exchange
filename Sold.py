@@ -376,3 +376,40 @@ for seg in segments:
 
 sold.to_csv('sold_features.csv', index=False)
 
+
+# %%
+# Week 7
+
+sold = pd.read_csv("sold_features.csv", low_memory=False)
+
+cols = ['ClosePrice', 'LivingArea', 'DaysOnMarket']
+
+print('original shape:', sold.shape) #(413309, 65)
+
+sold_clean = sold.copy()
+
+for col in cols:
+    print(f'{col} median:', sold[col].median())
+    print(f'{col} mean:', sold[col].mean())
+    Q1 = sold[col].quantile(0.25) 
+    Q3 = sold[col].quantile(0.75) 
+    IQR = Q3 - Q1
+    lower = Q1 - 1.5 * IQR
+    upper = Q3 + 1.5 * IQR
+    outliers = ((sold[col] < lower) | (sold[col] > upper))
+    sold[f'Outlier{col}Flag'] = outliers
+
+sold_clean = sold[(sold[f'OutlierClosePriceFlag'] == False) & (sold[f'OutlierLivingAreaFlag'] == False) & (sold[f'OutlierDaysOnMarketFlag'] == False)]
+
+print('cleaned shape:', sold_clean.shape) #(348522, 68)
+print('change in shape:', (sold_clean.shape[0] - sold.shape[0])) #64787
+
+for col in cols:
+    print(f'{col} cleaned median:', sold_clean[col].median())
+    print(f'{col} change in median:', (sold_clean[col].median() - sold[col].median()))
+    print(f'{col} cleaned mean:', sold_clean[col].mean())
+    print(f'{col} change in mean:', (sold_clean[col].mean() - sold[col].mean()))
+
+sold.to_csv('sold_outlier_flag.csv', index=False)
+sold_clean.to_csv('sold_outlier_filtered.csv', index=False)
+# %%
