@@ -17,17 +17,17 @@ for f in files:
     data.append(file)
 combined_listed = pd.concat(data, ignore_index=True)
 print(count1)
-##Before concat count = 891983
+##Before concat count = 929165
 
 count2 = len(combined_listed)
 print(count2)
-##After concat count = 891983
+##After concat count = 929165
 
 combined_listed = combined_listed[combined_listed['PropertyType'] == 'Residential']
 
 count3 = len(combined_listed)
 print(count3)
-##After filter count = 566673
+##After filter count = 591452
 
 combined_listed.to_csv('listed.csv', index=False)
 
@@ -82,14 +82,12 @@ for col in cols:
         sns.histplot(listed[col], bins=50, kde=True)
         plt.title(f"Listed Distribution of {col}")
         plt.savefig(f"Plots/listed_histogram/listed_{col}_histogram.png")
-        plt.show()
         plt.close()
 
         plt.figure(figsize = (10,6))
         sns.boxplot(x=listed[col])
         plt.title(f"Listed Boxplot of {col}")
         plt.savefig(f"Plots/listed_boxplot/listed_{col}_boxplot.png")
-        plt.show()
         plt.close()
 
 listed.to_csv('listed_eda.csv', index=False)
@@ -128,7 +126,7 @@ listed.to_csv('listed_mortgage.csv', index=False)
 
 listed = pd.read_csv("listed_mortgage.csv", low_memory=False)
 
-print("original shape:", listed.shape) #(566673, 86)
+print("original shape:", listed.shape) #(591452, 86)
 
 #converting date fields to datetime format and proving values are properly changed
 date_cols = [
@@ -173,22 +171,22 @@ numeric_cols = [
 numeric_report = listed[numeric_cols].dtypes
 print(numeric_report)
 
-#dropping columns determined in week 3 due to high null
+#dropping columns determined in week 2 due to high null
 listed = listed.drop(columns=drop_listed)
 
-print("after null drop shape:", listed.shape) #(566673, 73)
+print("after null drop shape:", listed.shape) #(591452, 73)
 
 #dropping any columns with only one unique value other than those determined to be saved
 single_val_listed = [col for col in listed.columns if (listed[col].nunique() <= 1)]
 listed = listed.drop(columns=single_val_listed)
 
-print("after single val drop shape:", listed.shape) #(566673, 71)
+print("after single val drop shape:", listed.shape) #(591452, 71)
 
 #dropping duplicates and duplicate columns ending in .1
 listed = listed.drop(list(listed.filter(regex='.1$')), axis=1)
 listed = listed.drop_duplicates(subset="ListingKey", keep="last")
 
-print("after duplicate drop shape:", listed.shape) #(566572, 61)
+print("after duplicate drop shape:", listed.shape) #(591317, 61)
 
 #dropping unnecessary and redundant columns
 drop_cols = [
@@ -215,7 +213,7 @@ drop_cols = [
 
 listed = listed.drop(columns=drop_cols)
 
-print("after unnecessary and redundant drop shape:", listed.shape) #(566572, 50)
+print("after unnecessary and redundant drop shape:", listed.shape) #(591317, 50)
 
 #finding rows with missing core values and dropping
 core_null = (
@@ -229,7 +227,7 @@ core_null = (
 
 listed = listed[~core_null]
 
-print("after null core drop shape:", listed.shape) #(565992, 50)
+print("after null core drop shape:", listed.shape) #(590714, 50)
 
 #finding rows with impossible numeric values and dropping
 invalid_numeric_values = (
@@ -251,12 +249,10 @@ invalid_numeric_values = (
 
 listed = listed[~invalid_numeric_values]
 
-print("after impossible numeric values drop shape:", listed.shape) #(565433, 50)
+print("after impossible numeric values drop shape:", listed.shape) #(590140, 50)
 
 #finding all invalid longitude or latitude values and flagging them with new column in csv
 invalid_geo_values = (
-    (listed['Latitude'].isnull()) | 
-    (listed['Longitude'].isnull()) |
     (listed['Latitude'] == 0) | 
     (listed['Longitude'] == 0) |
     (listed['Longitude'] > 0) |
@@ -270,9 +266,29 @@ invalid_geo_values = (
 listed['InvalidGeoFlag'] = invalid_geo_values
 invalid_geo_summary = listed[listed['InvalidGeoFlag'] == True]
 
-print(invalid_geo_summary)
-print("total rows with invalid coordinates:", len(invalid_geo_summary)) #80678
-#high invalid coordinate flags due to large amounts of null lat and lon
+print("total rows with invalid coordinates:", len(invalid_geo_summary)) #358
+
+#finding all null longitude or latitude values and flagging them with new column in csv
+null_geo_values = (
+    (listed['Latitude'].isnull()) | 
+    (listed['Longitude'].isnull())
+)
+
+listed['NullGeoFlag'] = null_geo_values
+null_geo_summary = listed[listed['NullGeoFlag'] == True]
+
+print("total rows with null coordinates:", len(null_geo_summary)) #80649
+
+#finding all invalid postal code values and flagging them with new column in csv pd.to_numeric(df["prices"], errors="coerce")
+invalid_postal_values = (
+    (pd.to_numeric(listed['PostalCode'], errors="coerce") < 90001) | 
+    (pd.to_numeric(listed['PostalCode'], errors="coerce") > 96162)
+)
+
+listed['InvalidPostalFlag'] = invalid_postal_values
+invalid_postal_summary = listed[listed['InvalidPostalFlag'] == True]
+
+print("total rows with invalid postal codes:", len(invalid_postal_summary)) #298
 
 #finding all invalid dates or timelines and flagging them with new column in csv
 invalid_dates = (
@@ -285,10 +301,9 @@ invalid_dates = (
 listed['InvalidDatesFlag'] = invalid_dates
 invalid_dates_summary = listed[listed['InvalidDatesFlag'] == True]
 
-print(invalid_dates_summary)
-print("total rows with invalid dates:", len(invalid_dates_summary)) #538
+print("total rows with invalid dates:", len(invalid_dates_summary)) #554
 
-print("final shape:", listed.shape) #(565433, 52)
+print("final shape:", listed.shape) #(590140, 54)
 
 listed.to_csv('listed_cleaned.csv', index=False)
 
@@ -358,32 +373,61 @@ for seg in segments:
     summary.to_csv((f"Summaries/listed_{seg}_summary.csv"), index=False)
 
 listed.to_csv('listed_features.csv', index=False)
+
 # %%
 # Week 7
 
 listed = pd.read_csv("listed_features.csv", low_memory=False)
 
-cols = ['ClosePrice', 'LivingArea', 'DaysOnMarket']
+print('original shape:', listed.shape) #(590140, 61)
 
-print('original shape:', listed.shape) #(565433, 59)
+#columns to filter for outliers
+cols = [
+    'ClosePrice', 
+    'LivingArea', 
+    'LotSizeSquareFeet', 
+    'DaysOnMarket', 
+    'ListPrice', 
+    'OriginalListPrice', 
+    'ListingToContractDays', 
+    'ContractToCloseDays'
+]
 
+#creating new copy of csv for filtered and flagged csv
 listed_clean = listed.copy()
 
+#finding all outlier values for each column and creating new flag column for each
 for col in cols:
     print(f'{col} median:', listed[col].median())
     print(f'{col} mean:', listed[col].mean())
-    Q1 = listed[col].quantile(0.25) 
-    Q3 = listed[col].quantile(0.75) 
-    IQR = Q3 - Q1
-    lower = Q1 - 1.5 * IQR
-    upper = Q3 + 1.5 * IQR
-    outliers = ((listed[col] < lower) | (listed[col] > upper))
-    listed[f'Outlier{col}Flag'] = outliers
+    if col == ('DaysOnMarket', 'ListingToContractDays', 'ContractToCloseDays', 'LotSizeSquareFeet'):
+        upper = listed[col].quantile(0.975)
+        outliers = ((listed[col] > upper))
+        listed[f'Outlier{col}Flag'] = outliers
+    else:
+        lower = listed[col].quantile(0.005)
+        upper = listed[col].quantile(0.975)
+        outliers = ((listed[col] < lower) | (listed[col] > upper))
+        listed[f'Outlier{col}Flag'] = outliers
 
-listed_clean = listed[(listed[f'OutlierClosePriceFlag'] == False) & (listed[f'OutlierLivingAreaFlag'] == False) & (listed[f'OutlierDaysOnMarketFlag'] == False)]
+#creating filtered csv with all rows with any outlier value being removed
+listed_clean = listed[
+    (listed[f'OutlierClosePriceFlag'] == False) & 
+    (listed[f'OutlierLivingAreaFlag'] == False) & 
+    (listed[f'OutlierLotSizeSquareFeetFlag'] == False) &
+    (listed[f'OutlierDaysOnMarketFlag'] == False) & 
+    (listed[f'OutlierListPriceFlag'] == False) & 
+    (listed[f'OutlierOriginalListPriceFlag'] == False) &
+    (listed['OutlierListingToContractDaysFlag'] == False) & 
+    (listed['OutlierContractToCloseDaysFlag'] == False) &
+    (listed['InvalidDatesFlag'] == False) &
+    (listed['InvalidGeoFlag'] == False) &
+    (listed['InvalidPostalFlag'] == False)
+]
 
-print('cleaned shape:', listed_clean.shape) #(484875, 62)
-print('change in shape:', (listed_clean.shape[0] - listed.shape[0])) #80558
+#comparing cleaned csv to flagged csv
+print('cleaned shape:', listed_clean.shape) #(530447, 69)
+print('change in shape:', (listed_clean.shape[0] - listed.shape[0])) #59693
 
 for col in cols:
     print(f'{col} cleaned median:', listed_clean[col].median())
